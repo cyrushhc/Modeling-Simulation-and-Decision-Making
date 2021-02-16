@@ -1,0 +1,334 @@
+##################
+# Garden of Eden #
+##################
+
+"""
+Finding the Garden of Eden [https://tinyurl.com/y24gc846] using the Wolfram rule 18 [https://tinyurl.com/y4hyqley]
+"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+import random 
+
+class Simulator():
+
+    # Mapping from the current state of a cell's neighborhood to the next state
+    # of the cell. This corresponds to Wolfram's Rule 184.
+    ca_map = {
+        (0, 0, 0): 0,
+        (0, 0, 1): 1,
+        (0, 1, 0): 0,
+        (0, 1, 1): 0,
+        (1, 0, 0): 1,
+        (1, 0, 1): 0,
+        (1, 1, 0): 0,
+        (1, 1, 1): 0}
+
+    def __init__(self, initial_config, length =10):
+        '''
+        Initialize new Simulator objects with the default parameter
+        settings.
+
+        Inputs:
+
+         * length (int) The number of cells in the cellular automaton.
+           Default: 15.
+
+        '''
+        self.length = length
+        # Arrays for storing the current state and the next state (when we are
+        # busy doing a state update).
+        self.current_state = initial_config # Set the initial to one of the 1024 possible array configuration
+        self.next_state = np.zeros(self.length)
+
+    def initialize(self):
+        '''
+        Reset the simulation state to a random initial state.
+        '''
+        self.time = 0 # Start timing 
+
+    def draw(self):
+        '''
+        Draw the current state of the cellular automaton.
+        '''
+        plt.figure()  # Create a new figure
+        plt.pcolor(
+            self.current_state.reshape((1, self.length)),
+            vmin = 0,
+            vmax = 1,
+            cmap = plt.cm.binary)
+        plt.axis('image')
+        plt.title(' t = ' + str(self.time))
+        plt.show()
+
+    def step(self):
+        '''
+        Update the state of the cellular automaton.
+        '''
+        # Update all cells, except the boundaries.
+        for i in range(1, self.length - 1):
+            neighborhood = self.current_state[i-1:i+2]
+            print(f"This{self.ca_map[tuple(neighborhood)]}")
+            print(i)
+            self.next_state[i] = self.ca_map[tuple(neighborhood)]
+            
+        # Update the boundaries using periodic boundary conditions.
+        neighborhood = self.current_state[[-1, 0, 1]]
+        self.next_state[0] = self.ca_map[tuple(neighborhood)]
+        neighborhood = self.current_state[[-2, -1, 0]]
+        self.next_state[-1] = self.ca_map[tuple(neighborhood)]
+        
+        # Swap next state and current state
+        self.current_state, self.next_state = self.next_state, self.current_state
+        self.time += 1
+        
+def cf_number(cf):
+    """
+    This function is used to convert any array configuration (binary) back to the index number in integer
+    """
+    return sum(cf[10 - 1 - i] * 2**i for i in range(10))
+    
+import numpy as np
+
+# Create dictionary for all the possible configurations for a size-10 array
+allconfig = {}
+
+for i in range(1024):
+    
+    # We will change an integer into a binary code using "bin()"
+    # We also fill in the number of zeros required for it to be a 10-entry array 
+    # For each value stored in the dictionary, we save the configuration as well as whether it is a Garden of Eden, 
+    # We set the initial condition to True and update it to False when it shows up 
+    if len(list(bin(i))[2:]) == 1:
+        a = np.array([0 for j in range(9)] + list(bin(i))[2:])
+        a[a == ''] = int
+        a = a.astype(np.int)
+        allconfig[i] = [a, True]
+    if len(list(bin(i))[2:]) == 2:
+        a = np.array([0 for j in range(8)] + list(bin(i))[2:])
+        a[a == ''] = int
+        a = a.astype(np.int)
+        allconfig[i] = [a, True]
+    if len(list(bin(i))[2:]) == 3:
+        a = np.array([0 for j in range(7)] + list(bin(i))[2:])
+        a[a == ''] = int
+        a = a.astype(np.int)
+        allconfig[i] = [a, True]  
+    if len(list(bin(i))[2:]) == 4:
+        a = np.array([0 for j in range(6)] + list(bin(i))[2:])
+        a[a == ''] = int
+        a = a.astype(np.int)
+        allconfig[i] = [a, True]  
+    if len(list(bin(i))[2:]) == 5:
+        a = np.array([0 for j in range(5)] + list(bin(i))[2:])
+        a[a == ''] = int
+        a = a.astype(np.int)
+        allconfig[i] = [a, True]  
+    if len(list(bin(i))[2:]) == 6:
+        a = np.array([0 for j in range(4)] + list(bin(i))[2:])
+        a[a == ''] = int
+        a = a.astype(np.int)
+        allconfig[i] = [a, True] 
+    if len(list(bin(i))[2:]) == 7:
+        a = np.array([0 for j in range(3)] + list(bin(i))[2:])
+        a[a == ''] = int
+        a = a.astype(np.int)
+        allconfig[i] = [a, True] 
+    if len(list(bin(i))[2:]) == 8:
+        a = np.array([0 for j in range(2)] + list(bin(i))[2:])
+        a[a == ''] = int
+        a = a.astype(np.int)
+        allconfig[i] = [a, True]  
+    if len(list(bin(i))[2:]) == 9:
+        a = np.array([0 for j in range(1)] + list(bin(i))[2:])
+        a[a == ''] = int
+        a = a.astype(np.int)
+        allconfig[i] = [a, True] 
+    if len(list(bin(i))[2:]) == 10:
+        a = np.array(list(bin(i))[2:])
+        a[a == ''] = int
+        a = a.astype(np.int)
+        allconfig[i] = [a, True] 
+        
+# We take each of the 1024 configuration and update them once to check all the possible successor states
+# We then update the status of that condifuration to False as it is not Garden of Eden
+for i in range (1024):
+    initial_config = allconfig[i][0]
+    sim = Simulator(initial_config)
+    sim.initialize()
+    sim.step()
+    index = cf_number(sim.current_state)
+    allconfig[index][1] = False 
+
+# Print out the states and check whether there is 808 configurations as requested in the instruction 
+count = 0
+for i in range(1024):
+    config = allconfig[i]
+    if config[1] == True:
+        count+= 1
+        sim = Simulator(config[0])
+        sim.initialize()
+        sim.draw()
+print(f"Check whether there is 808 configurations: {808==count}")
+
+############################
+# mean-field approximation #
+############################
+
+"""
+Analyzing the Apply the mean-field approximation to the waves in 
+excitable media model with k = 2 (3 states in total).
+"""
+
+from scipy.special import comb
+e = [0.0001] # original probability of excited state
+q = [0.9999] # original probability of quiescent state
+r = [0] # original probability of refractory state
+t = 1/3  #trigger prob
+
+for i in range(100):
+    q.append(
+        (1 - e[i] - r[i]) * (sum(
+            comb(8, k) * e[i]**k * (1-e[i])**(8-k) * (1-t)**k for k in range(9)) + r[i])) #State transition probability from any state to quiescent (q->q or r->q)
+    e.append(
+        (1 - e[i] - r[i]) * sum(
+            comb(8, k) * e[i]**k * (1-e[i])**(8-k) * (1-(1-t)**k) for k in range(9))) #State transition probability from any state to excited (q->E)
+    r.append(e[i]) #State transition probability from any state to Refractory (e->r)
+
+import pylab
+pylab.plot(range(101), q,  label = "Quiescent states")
+pylab.plot(range(101), e, label = "Excited states")
+pylab.plot(range(101), r,  label = "Refactory states")
+pylab.xlabel("Time Steps")
+pylab.ylabel("Prbability")
+pylab.legend()
+pylab.show()
+
+##################################
+# Renormalization Group Analysis #
+##################################
+
+"""
+What would happen if the space of the forest fire propagation were 1-D or 3-D? Conduct the
+renormalization group analysis to see what happens in those cases.
+"""
+#For the One Dimensional 
+
+from pylab import *
+
+
+def initialize():
+    global x, result
+    x = .9
+    result = [x]
+def observe():
+    global x, result
+    result.append(x)
+
+def f(x): ### iterative map is now defined as f(x)
+    return x**2 # This is the line we change for the 1-D
+def update():
+    global x, result
+    x = f(x)
+
+initialize()
+for t in range(30):
+    update()
+    observe()
+    
+    
+### drawing diagonal line
+xmin, xmax = 0, 1
+plot([xmin, xmax], [xmin, xmax], 'k')
+### drawing curve
+rng = arange(xmin, xmax, (xmax - xmin) / 100.)
+
+plot(rng, list(map(f, rng)), 'k', color = "orange", label ="Probability Transition")
+
+### drawing trajectory
+horizontal = [result[0]]
+vertical = [result[0]]
+for x in result[1:]:
+    horizontal.append(vertical[-1])
+    vertical.append(x)
+    horizontal.append(x)
+    vertical.append(x)
+    plot(horizontal, vertical, 'b')
+
+xlabel("Probability of percolation (current scale)")
+ylabel("Probability of percolation (next scale)")
+legend()
+show()
+
+# Here we are calculating the solution for x when we see the current state (x) = the future state (x**2)
+
+from sympy.solvers import solve
+from sympy import Symbol, N
+
+x = Symbol('x')
+R3 = solve(x**2-x,x)
+print ([N(solution) for solution in R3])
+
+#For the Three Dimensional 
+
+from pylab import *
+
+
+def initialize():
+    global x, result
+    x = 0.5
+    result = [x]
+    
+def observe():
+    global x, result
+    result.append(x)
+
+def f(x): ### iterative map is now defined as f(x)
+
+    # This is the line we change for the 1-D
+    return x**8 + 8*x**7*(1-x) + 28*x**6*(1-x)**2 + 56*x**5*(1-x)**3 +68*x**4*(1-x)**4 + 48*x**3*(1-x)**5 + 16*x**2*(1-x)**6 
+
+def update():
+    global x, result
+    x = f(x)
+
+initialize()
+for t in range(30):
+    update()
+    observe()
+    
+    
+### drawing diagonal line
+xmin, xmax = 0, 1
+plot([xmin, xmax], [xmin, xmax], 'k')
+### drawing curve
+rng = arange(xmin, xmax, (xmax - xmin) / 100.)
+
+plot(rng, list(map(f, rng)),'k', color = "orange", label ="Probability Transition")
+
+### drawing trajectory
+horizontal = [result[0]]
+vertical = [result[0]]
+for x in result[1:]:
+    horizontal.append(vertical[-1])
+    vertical.append(x)
+    horizontal.append(x)
+    vertical.append(x)
+    plot(horizontal, vertical, 'b')
+
+axvline(x=0.0794324533790455, label = "critical point")
+xlabel("Probability of percolation (current scale)")
+ylabel("Probability of percolation (next scale)")
+legend()
+show()
+
+# Here we are calculating the solution for x when we see the current state (x) = the future state 
+# x**8 + 8*x**7*(1-x) + 28*x**6*(1-x)**2 + 56*x**5*(1-x)**3 +68*x**4*(1-x)**4 + 48*x**3*(1-x)**5 + 16*x**2*(1-x)**6 
+
+from sympy.solvers import solve
+from sympy import Symbol, N
+x = Symbol('x')
+R2 = solve(x**8 + 8*x**7*(1-x) + 28*x**6*(1-x)**2 + 56*x**5*(1-x)**3 +68*x**4*(1-x)**4 + 48*x**3*(1-x)**5 + 16*x**2*(1-x)**6 -x,x)
+print ([N(solution) for solution in R2])
+
+
