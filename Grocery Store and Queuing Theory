@@ -1,0 +1,434 @@
+###############
+# Assumptions #
+###############
+
+"""
+The time between consecutive customers joining a queue is assumed to come from an exponential
+distribution with rate parameter λ = 1 customer per minute. When a customer has collected all
+their items and is ready to pay, they join the shortest queue.
+The time it takes for a cashier to serve a customer is normally distributed with mean μ1 = 3
+minutes standard deviation σ minute. 1 = 1
+After a shopper has been served, there is a small chance (5%) they will need extended service
+from the store manager. The time taken for the manager to handle a request is also normally
+distributed but with mean μ2 = 4 minutes and standard deviation σ2 = 1 minute. There is only 1
+manager and the manager can handle only 1 customer at a time.
+After closing time (6 pm), no one is allowed to join the queues anymore and any customers already
+in the queues are served until no customers remain.
+Due to the physical constraints of the store, the number of queues/cashiers cannot exceed 10.
+"""
+
+# Full Analysis here: https://www.notion.so/cyrushhchuang/Assignment-2f2e741b646b4b7fa77167b1a1e37714
+
+
+###############
+# CODE STARTS #
+###############
+
+import heapq
+import scipy.stats as sts
+import numpy as np
+import matplotlib.pyplot as plt
+import random 
+
+import heapq
+
+class Event:
+    '''
+    Store the properties of one event in the Schedule class defined below. Each
+    event has a time at which it needs to run, a function to call when running
+    the event, along with the arguments and keyword arguments to pass to that
+    function.
+    '''
+    def __init__(self, timestamp, function, *args, **kwargs):
+        self.timestamp = timestamp
+        self.function = function
+        self.args = args
+        self.kwargs = kwargs
+
+    def __lt__(self, other):
+        '''
+        This overloads the less-than operator in Python. We need it so the
+        priority queue knows how to compare two events. We want events with
+        earlier (smaller) times to go first.
+        '''
+        return self.timestamp < other.timestamp
+
+    def run(self, schedule):
+        '''
+        Run an event by calling the function with its arguments and keyword
+        arguments. The first argument to any event function is always the
+        schedule in which events are being tracked. The schedule object can be
+        used to add new events to the priority queue.
+        '''
+        self.function(schedule, *self.args, **self.kwargs)
+
+
+class Schedule:
+    '''
+    Implement an event schedule using a priority queue. You can add events and
+    run the next event.
+    
+    The `now` attribute contains the time at which the last event was run.
+    '''
+    
+    def __init__(self):
+        self.now = 0  # Keep track of the current simulation time
+        self.priority_queue = []  # The priority queue of events to run
+        self.done = 0
+    
+    def add_event_at(self, timestamp, function, *args, **kwargs):
+        
+        # Add an event to the schedule at a particular point in time.
+
+        heapq.heappush(
+            self.priority_queue,
+            Event(timestamp, function, *args, **kwargs))
+    
+    def add_event_after(self, interval, function, *args, **kwargs):
+        # Add an event to the schedule after a specified time interval.
+        self.add_event_at(self.now + interval, function, *args, **kwargs)
+    
+    def next_event_time(self):
+        return self.priority_queue[0].timestamp
+
+    def run_next_event(self):
+        # Get the next event from the priority queue and run it.
+        event = heapq.heappop(self.priority_queue)
+        self.now = event.timestamp
+        event.run(self)
+        
+        
+    def __repr__(self):
+        return (
+            f'Schedule() at time {self.now} ' +
+            f'with {len(self.priority_queue)} events in the queue')
+    
+    def print_events(self):
+        for event in sorted(self.priority_queue):
+            print(f'   {event.timestamp}: {event.function.__name__}')
+            
+class Queue:
+    def __init__(self, service_distribution):
+        self.service_distribution = service_distribution
+
+        # We start with an empty queue and the server not busy
+
+        self.people_in_queue = 0
+        self.people_being_served = 0
+        
+        # Added the three arrays to keep track of the variables of interest
+        self.begintime = np.array([])
+        self.endtime = np.array([])
+        self.queuelength = []
+
+    def add_customer(self, schedule, manager_object):
+
+        # Update the new queue.length when it changes (when we add customers)
+        self.queuelength.append(self.people_in_queue) 
+
+        # Keep track of the begin time for each customer
+        self.begintime = np.append(self.begintime, schedule.now)
+
+        # Add the customer to the queue
+        self.people_in_queue += 1
+        
+        # If there is no one being served
+        if self.people_being_served < 1:
+            # This customer can be served immediately
+            schedule.add_event_after(0, self.start_serving_customer, manager_object)
+
+    def start_serving_customer(self, schedule, manager_object):
+
+        # Move the customer from the queue to a server
+        self.people_in_queue -= 1
+        self.people_being_served += 1
+        
+        # Schedule when the server will be done with the customer
+        service_time = self.service_distribution.rvs() # Sample a service time from the distribution
+        schedule.add_event_after(service_time,self.finish_serving_customer, manager_object)
+
+    def finish_serving_customer(self, schedule, manager_object):
+
+        # Update the new queue.length         
+        self.queuelength.append(self.people_in_queue) 
+        
+        # Keep track of when a customer is done being served
+        self.endtime = np.append(self.endtime, schedule.now)
+
+        # Remove the customer from the server
+        self.people_being_served -= 1
+        
+        if self.people_in_queue > 0:
+            # There are more people in the queue so serve the next customer
+            schedule.add_event_after(0, self.start_serving_customer, manager_object)
+        
+        #Checking whether we want to add the customer to the manager queue
+        random_check = random.random() #create a random generator that generates a value between 0 and 1
+        if random_check <= 0.05:
+        	manager_object.add_to_manager_queue(schedule) 
+
+class Manager(Queue):
+    """
+    We create this extra class to send customers into the manager queue if they need the extra service.
+    We are inheriting some attrivutes from the queue class. 
+    """
+    def __init__(self):
+        super().__init__(service_distribution) #inheritence
+        self.service_distribution = sts.norm(loc=4, scale=1)#set the new service_distribution time 
+
+        #Keep track of the begin and end time
+        self.management_begin_time = np.array([]) 
+        self.management_end_time = np.array([])
+        
+        #We do not track the number of people in the queue as we believe
+        #that the maximum queue length of the manager queue would not exceed 
+        #the max queue length of other queues because it is less likely that people go to that queue
+        
+    def add_to_manager_queue(self, schedule):
+        
+        #keep track of the time when the manager start serving the customer 
+        self.management_begin_time= np.append(self.management_begin_time, schedule.now)
+        
+        # Add the customer to the queue
+        self.people_in_queue += 1
+        
+        # If there is no one being served
+        if self.people_being_served < 1:
+            # This customer can be served immediately
+            schedule.add_event_after(0, self.manager_start_serving_customer)
+        
+    def manager_start_serving_customer(self, schedule):
+        
+        # Move the customer from the queue to a server
+        self.people_in_queue -= 1
+        self.people_being_served += 1 
+        
+        # Schedule when the server will be done with the customer
+        service_time = self.service_distribution.rvs()
+        schedule.add_event_after(
+            service_time,
+            self.manager_finish_serving_customer)           
+    def manager_finish_serving_customer(self,schedule):
+        
+        # Keep track of when the manager finishes serving the customer 
+        self.management_end_time= np.append(self.management_end_time, schedule.now)
+        self.people_being_served -= 1
+        
+        if self.people_in_queue > 0:
+            # There are more people in the queue so serve the next customer
+            schedule.add_event_after(0, self.manager_start_serving_customer)
+             
+class GroceryStore():
+
+    def __init__(self, arrival_distribution, service_distribution, number_of_queues, run_until):
+
+        #This is created so that can keep track of different queues
+        self.queue = []
+        
+        #Create a given number of queues
+        for i in range(number_of_queues):
+            self.queue.append(Queue(service_distribution))
+    
+        self.arrival_distribution = arrival_distribution
+        self.run_until = run_until # this would keep track of whether we should keep adding customer
+        self.manager = Manager() #Create a manager object that we will send into the queue 
+
+
+    def add_customer(self, schedule):
+        
+        #If the store is still open, keep adding customers
+        if schedule.now < self.run_until:
+            
+            # Add this customer to a queue
+            
+            # Decide which queue to add
+            queue_to_add = 200 #set a really big number so that we can make sure that this comparison variable will be set to one of the queues
+            index = 0 # create a variable to track which queue has the shortest length
+            
+            # Find the shortest queue
+            for i in range(len(self.queue)):
+                if self.queue[i].people_in_queue <= queue_to_add:
+                    queue_to_add = self.queue[i].people_in_queue
+                    index = i
+            
+            # Add the custoemr to the shortest queue
+            self.queue[index].add_customer(schedule, self.manager)
+
+            # Schedule when to add another customer
+            schedule.add_event_after(
+                self.arrival_distribution.rvs(),
+                self.add_customer)
+        else:
+            #If the store is already closed, skip this event
+            return 
+
+    def run(self, schedule):
+        # Schedule when the first customer arrives
+        schedule.add_event_after(
+            self.arrival_distribution.rvs(),
+            self.add_customer)    
+    
+
+def run_simulation(arrival_distribution, service_distribution, run_until, number_of_queues):
+
+    #A list that keeps track of the queue length over time
+    schedule = Schedule()
+    grocery_store = GroceryStore(arrival_distribution, service_distribution, number_of_queues, run_until)
+    grocery_store.run(schedule) #this one add the first event 
+
+    while len(schedule.priority_queue)>0:
+        schedule.run_next_event()
+
+    return grocery_store
+
+def run_experiment(arrival_distribution, service_distribution, run_until, number_of_queues, num_trials):
+    
+    # Create lists to store experiment results
+    wait_time_exp_results = []
+    max_qlength_exp_results = []
+    idle_rate_exp_results = []
+    
+    for i in range(num_trials):
+        
+        #Run the simulation 
+        grocery_store = run_simulation(arrival_distribution, service_distribution, run_until, number_of_queues)
+        
+        #Save the results of the wait_time, queue_length for each run in an np.array()
+        wait_time = np.array([])
+        queue_length = np.array([])
+        
+        #Create a loop to take the data of each queue and combine them into one list 
+        for i in range(number_of_queues):
+            wait_time = np.append (wait_time, grocery_store.queue[i].endtime - grocery_store.queue[i].begintime )
+            queue_length = np.append (queue_length, grocery_store.queue[i].queuelength)
+
+        #Calculate the manager_wait_time and add it to the total wait time
+        manager_wait_time = grocery_store.manager.management_end_time - grocery_store.manager.management_begin_time
+        wait_time = np.append(wait_time, manager_wait_time)
+    
+        #Calculate the idle rate 
+        idlecount = 0
+        for i in queue_length:
+            if i == 0:
+                idlecount+=1
+
+        idlerate = idlecount/len(queue_length)
+        
+        #Append each experiment result to the list 
+        
+        wait_time_exp_results.append(np.mean(wait_time))
+        max_qlength_exp_results.append(max(queue_length))
+        idle_rate_exp_results.append(idlerate)
+        
+    return wait_time_exp_results, max_qlength_exp_results,idle_rate_exp_results
+        
+
+def theoretical_queue_length_mg1(rho,sigma, number_of_queues):
+    """
+    This function is used to calculate the theoretical average queue length for M/G/1 model.
+    The only thing we modify here is adding the number of queues, which would influence the arrival rate
+    """
+    return (rho/number_of_queues)**2 / 2 / (1-(rho/number_of_queues)) * (1 + sigma**2 / tau**2)
+
+def theoretical_wait_time_mg1(rho,sigma, number_of_queues):
+    """
+    This function is used to calculate the theoretical wait time for M/G/1 model.
+    The only thing we modify here is adding the number of queues, which would influence the arrival rate
+    """
+    return (((rho/number_of_queues)*tau)/(2*(1-(rho/number_of_queues)))) * (1+ (sigma^2)/ (tau^2)) 
+    
+    #Run the M/G/1 queue experiment for differnet queue lengths
+
+#Parameters to set 
+lmda = 1 #arrival rate
+tau = 3  #1 / service rate
+sigma = 1 #standard deviation
+run_until = 540 #how many minutes this simulation would run (18-9)*60 = 540
+num_trials = 200
+number_of_queues_to_try = 10 #We set how many number of queues we want to try 
+
+wait_time_results = [] #create a list to store the results of mean waiting time for different queue numbers
+qlength_results = [] #create a list to store the results for the mean queue length for different queue numbers
+idle_rate_results = [] #create a list to store the results for mean idle rate for different queue numbers
+wait_error = np.array([]) #create a numpy.array to store the results of standard error of waiting time for different queue numbers
+qlength_error =np.array([])  #create a numpy.array to store the results for the standard error of queue length for different queue numbers
+idle_error = np.array([])   #create a numpy.array to store the results for standard error of idle rate for different queue numbers
+
+#Try out different number of queues 
+for number_of_queues in range(1, number_of_queues_to_try+1):
+    
+    #Save the experiment results 
+    exp_results = run_experiment(arrival_distribution, service_distribution, run_until, number_of_queues, num_trials)
+    
+    #Extract the results and claculate the variable of interst 
+    wait_time_results.append(np.mean(exp_results[0]) )
+    wait_error = np.append(wait_error,sts.sem(exp_results[0]) )
+    qlength_results.append(np.mean(exp_results[1]))
+    qlength_error = np.append(qlength_error, sts.sem(exp_results[1]) )
+    idle_rate_results.append(np.mean(exp_results[2]))
+    idle_error =np.append(idle_error,sts.sem(exp_results[2]))
+
+
+# Create this for the x-axis (number of queues)
+x = [i for i in range(1,number_of_queues_to_try+1)]
+rho = lmda * tau
+
+#For wait time - before zooming in 
+theoretical_waittime = [0,0,0] + [theoretical_wait_time_mg1(rho,sigma,i) for i in range(4,number_of_queues_to_try+1)]
+
+plt.errorbar(x ,wait_time_results, 1.96*wait_error, marker='o', capsize=5, linestyle='--', linewidth=1,label="Empirical (with 95% confidence interval)")
+plt.plot(x, theoretical_waittime ,color='red', marker='o', linestyle='--', linewidth=1,label='theoretical')
+plt.xlabel("Number of Queues(Cashiers)")
+plt.ylabel("Average Wait Time (min)")
+plt.title("Figure 1-1\nComparison between the theoretical and empirical \n average wait time for different number of queues")
+plt.legend()
+
+plt.show()
+
+#For wait time - after zooming in 
+theoretical_waittime = [0,0,0] + [theoretical_wait_time_mg1(rho,sigma,i) for i in range(4,number_of_queues_to_try+1)]
+
+plt.errorbar(x[3:] ,wait_time_results[3:], 1.96*wait_error[3:], marker='o', capsize=5, linestyle='--', linewidth=1,label="Empirical (with 95% confidence interval)")
+plt.plot(x[3:], theoretical_waittime[3:] ,color='red', marker='o', linestyle='--', linewidth=1,label='theoretical')
+plt.xlabel("Number of Queues(Cashiers)")
+plt.ylabel("Average Wait Time (min)")
+plt.title("Figure 1-2 (Zoom-in of 1-1)\nComparison between the theoretical and empirical \n average wait time for different number of queues")
+plt.legend()
+
+plt.show()
+
+
+#For queue length - before zooming in
+theoretical_qlength = [0,0,0] + [theoretical_queue_length_mg1(rho,sigma,i) for i in range(4,number_of_queues_to_try+1)]
+
+plt.errorbar(x , qlength_results, 1.96 *qlength_error, marker='o', capsize=5, linestyle='--', linewidth=1,label="Empirical (with 95% confidence interval)")
+plt.plot(x, theoretical_qlength,color='red', marker='o', linestyle='--', linewidth=1,label='theoretical')
+plt.xlabel("Number of Queues(Cashiers)")
+plt.ylabel("Maximum Queue Length(customers)")
+plt.title("Figure 2-1\nComparison between the theoretical and empirical \nmaximum queue lengths for different number of queues")
+plt.legend()
+
+plt.show()
+
+
+#For queue length - after zooming in
+theoretical_qlength = [0,0,0] + [theoretical_queue_length_mg1(rho,sigma,i) for i in range(4,number_of_queues_to_try+1)]
+
+plt.errorbar(x[3:] , qlength_results[3:], 1.96 *qlength_error[3:], marker='o', capsize=5, linestyle='--', linewidth=1,label="Empirical (with 95% confidence interval)")
+plt.plot(x[3:], theoretical_qlength[3:],color='red', marker='o', linestyle='--', linewidth=1,label='theoretical')
+plt.xlabel("Number of Queues(Cashiers)")
+plt.ylabel("Maximum Queue Length(customers)")
+plt.title("Figure 2-2 (Zoom-in of 2-1)\nComparison between the theoretical and empirical \nmaximum queue lengths for different number of queues")
+plt.legend()
+
+plt.show()
+
+
+#For idle rate
+plt.errorbar(x , idle_rate_results, 1.96 *idle_error, marker='o', capsize=5, linestyle='--', linewidth=1,label="Empirical (with 95% confidence interval)")
+plt.xlabel("Number of Queues(Cashiers)")
+plt.ylabel("Idle Rate")
+plt.title("Figure 3\nChange in Idle Rate \nwith the Change in Number Of Queues.")
+plt.legend()
+plt.show()
+
